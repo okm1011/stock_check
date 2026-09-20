@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>stock_check · 바이낸스 선물</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <h1>stock_check</h1>
+      <p class="sub">바이낸스 USDT-M 무기한 · 분류/메모 워치리스트</p>
+    </div>
+    <div class="status" id="status">시세 불러오는 중…</div>
+  </header>
+
+  <section class="toolbar">
+    <label>
+      기간
+      <select id="period">
+        {% for p in periods %}
+        <option value="{{ p }}" {% if p == default_period %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      분류
+      <select id="catFilter">
+        <option value="">전체</option>
+        {% for c in categories %}
+        <option value="{{ c }}">{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="grow">
+      검색
+      <input id="q" type="search" placeholder="심볼 / 메모" autocomplete="off" />
+    </label>
+    <label>
+      정렬
+      <select id="sort">
+        <option value="change_desc">변동↓</option>
+        <option value="change_asc">변동↑</option>
+        <option value="volume_desc">거래대금↓</option>
+        <option value="symbol">심볼</option>
+      </select>
+    </label>
+  </section>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="num">#</th>
+          <th>심볼</th>
+          <th class="num">현재가</th>
+          <th class="num">변동</th>
+          <th class="num">24h 대금</th>
+          <th>분류</th>
+          <th>메모</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="7" class="empty">데이터 대기 중</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    window.STOCK_CHECK = {
+      pollInterval: {{ poll_interval }},
+      categories: {{ categories | tojson }},
+    };
+  </script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

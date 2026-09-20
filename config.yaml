@@ -1,0 +1,29 @@
+# stock_check — 바이낸스 USDT-M 무기한 선물 워치리스트
+
+host: 127.0.0.1
+port: 8090
+
+poll_interval_seconds: 60
+quote_asset: USDT
+contract_type: PERPETUAL   # USDT-M 무기한만
+
+# 웹에서 고를 수 있는 변화 기간
+default_period: 24h
+periods:
+  - 15m
+  - 1h
+  - 4h
+  - 24h
+  - 7d
+
+# 스냅샷은 최대 이 기간 보관 (7d 변동 계산용)
+history_days: 8
+
+db_path: data/stock_check.db
+
+categories:
+  - 미분류
+  - 관심
+  - 매수후보
+  - 관망
+  - 제외
