@@ -1,8 +1,14 @@
-const cfg = window.STOCK_CHECK || { pollInterval: 60, categories: [] };
+const cfg = window.STOCK_CHECK || { pollInterval: 60, categories: [], sectors: [] };
 const $ = (id) => document.getElementById(id);
 
 const state = {
   rows: [],
+  macro: [],
+  sectors: [],
+  altCount: 0,
+  classified: 0,
+  altStrength: null,
+  sector: "all",
   updatedAt: null,
   backfill: false,
 };
@@ -49,23 +55,32 @@ function catOptions(selected) {
 }
 
 function esc(s) {
-  return String(s)
+  return String(s ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll('"', "&quot;");
 }
 
+function altRows() {
+  const all = (state.sectors || []).flatMap((s) =>
+    (s.rows || []).map((r) => ({ ...r, sector: s.id, sector_label: s.label }))
+  );
+  return all.length ? all : state.rows.filter((r) => !r.is_macro);
+}
+
 function filtered() {
   const q = $("q").value.trim().toUpperCase();
   const cat = $("catFilter").value;
-  let rows = state.rows.slice();
+  let rows = altRows();
+  if (state.sector !== "all") rows = rows.filter((r) => r.sector === state.sector);
   if (cat) rows = rows.filter((r) => r.category === cat);
   if (q) {
     rows = rows.filter(
       (r) =>
         r.symbol.includes(q) ||
         (r.base || "").toUpperCase().includes(q) ||
-        (r.memo || "").toUpperCase().includes(q)
+        (r.memo || "").toUpperCase().includes(q) ||
+        (r.sector_label || "").includes($("q").value.trim())
     );
   }
   const sort = $("sort").value;
@@ -81,11 +96,54 @@ function filtered() {
   return rows;
 }
 
-function render() {
+function renderMacro() {
+  const el = $("macro");
+  el.innerHTML = (state.macro || [])
+    .map((m) => {
+      const ch = fmtChg(m.change_pct);
+      const off = m.listed === false;
+      return `<article class="glass macro-card ${off ? "off" : ""}">
+        <div>
+          <div class="name">${esc(m.label)}</div>
+          <div class="hint">${esc(m.hint || m.symbol)}${off ? " · 미상장" : ""}</div>
+        </div>
+        <div>
+          <div class="px">${fmtPrice(m.price)}</div>
+          <div class="chg ${ch.cls}">${ch.text}</div>
+        </div>
+      </article>`;
+    })
+    .join("");
+}
+
+function renderChips() {
+  const el = $("chips");
+  const all = {
+    id: "all",
+    label: "전체",
+    count: state.altCount,
+    ...(state.altStrength || {}),
+  };
+  const items = [all].concat(state.sectors || []);
+  el.innerHTML = items
+    .map((s) => {
+      const ch = fmtChg(s.median_chg);
+      const br =
+        s.up_pct == null ? "—" : `${Number(s.up_pct).toFixed(0)}%↑`;
+      return `<button type="button" class="chip ${state.sector === s.id ? "on" : ""}" data-sec="${esc(s.id)}">
+        <span class="chip-name">${esc(s.label)} <em>${s.count ?? 0}</em></span>
+        <span class="chip-med ${ch.cls}">${ch.text}</span>
+        <span class="chip-br">${br}</span>
+      </button>`;
+    })
+    .join("");
+}
+
+function renderTable() {
   const rows = filtered();
   const tbody = $("tbody");
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty">조건에 맞는 종목이 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">조건에 맞는 종목이 없습니다</td></tr>`;
     return;
   }
   tbody.innerHTML = rows
@@ -94,6 +152,7 @@ function render() {
       return `<tr data-symbol="${esc(r.symbol)}">
         <td class="num">${i + 1}</td>
         <td><span class="sym">${esc(r.base || r.symbol)}</span><span class="base">${esc(r.symbol)}</span></td>
+        <td><span class="sec-pill">${esc(r.sector_label || "")}</span></td>
         <td class="num">${fmtPrice(r.price)}</td>
         <td class="num ${ch.cls}">${ch.text}</td>
         <td class="num">${fmtVol(r.quote_volume)}</td>
@@ -109,10 +168,21 @@ function render() {
     .join("");
 }
 
+function render() {
+  renderMacro();
+  renderChips();
+  renderTable();
+  $("altMeta").textContent =
+    `알트 ${state.altCount}종 · 칩 = 중간값 변동 / 상승비율 (선택 기간)`;
+}
+
 function applyStatus(data) {
   const el = $("status");
-  const n = data.count || data.rows?.length || 0;
-  const bits = [`${n}종목`, `갱신 ${fmtTime(data.updated_at)}`, data.poll_status || ""];
+  const bits = [
+    `알트 ${data.alt_count ?? 0}`,
+    `갱신 ${fmtTime(data.updated_at)}`,
+    data.poll_status || "",
+  ];
   if (data.backfill) bits.push("과거가 채우는 중");
   el.textContent = bits.filter(Boolean).join(" · ");
   el.className = "status " + (data.poll_status === "error" ? "err" : "ok");
@@ -124,14 +194,19 @@ async function load() {
   const res = await fetch(`/api/rows?period=${encodeURIComponent(period)}`);
   const data = await res.json();
   state.rows = data.rows || [];
+  state.macro = data.macro || [];
+  state.sectors = data.sectors || [];
+  state.altCount = data.alt_count || 0;
+  state.classified = data.alt_classified || 0;
+  state.altStrength = data.alt_strength || null;
   state.updatedAt = data.updated_at;
   state.backfill = !!data.backfill;
   applyStatus(data);
   const cat = $("catFilter");
   const keep = cat.value;
-  const opts = ['<option value="">전체</option>']
-    .concat(currentCats().map((c) => `<option value="${esc(c)}">${esc(c)}</option>`));
-  cat.innerHTML = opts.join("");
+  cat.innerHTML = ['<option value="">전체</option>']
+    .concat(currentCats().map((c) => `<option value="${esc(c)}">${esc(c)}</option>`))
+    .join("");
   cat.value = keep;
   render();
 }
@@ -152,11 +227,18 @@ async function saveRow(tr) {
   });
 }
 
+$("chips").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-sec]");
+  if (!btn) return;
+  state.sector = btn.dataset.sec;
+  render();
+});
+
 $("tbody").addEventListener("change", async (e) => {
   const tr = e.target.closest("tr");
   if (!tr) return;
   if (e.target.classList.contains("cat") && e.target.value === "__custom__") {
-    const name = prompt("분류 이름");
+    const name = prompt("태그 이름");
     if (!name) {
       e.target.value = "미분류";
       return;
@@ -180,10 +262,12 @@ $("tbody").addEventListener("input", (e) => {
   memoTimer = setTimeout(() => saveRow(tr), 400);
 });
 
-["period", "catFilter", "sort"].forEach((id) => $(id).addEventListener("change", () => {
-  if (id === "period") load();
-  else render();
-}));
+["period", "catFilter", "sort"].forEach((id) =>
+  $(id).addEventListener("change", () => {
+    if (id === "period") load();
+    else render();
+  })
+);
 $("q").addEventListener("input", render);
 
 load();

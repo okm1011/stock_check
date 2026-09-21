@@ -3,33 +3,29 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>stock_check · 바이낸스 선물</title>
+  <title>stock_check · 대세 / 알트</title>
   <link rel="stylesheet" href="/static/app.css" />
 </head>
 <body>
-  <header class="top">
+  <div class="orb orb-a"></div>
+  <div class="orb orb-b"></div>
+  <div class="orb orb-c"></div>
+
+  <header class="glass top">
     <div class="brand">
+      <p class="kicker">Binance USDT-M</p>
       <h1>stock_check</h1>
-      <p class="sub">바이낸스 USDT-M 무기한 · 분류/메모 워치리스트</p>
+      <p class="sub">대세판단 · 알트 섹터 워치리스트</p>
     </div>
     <div class="status" id="status">시세 불러오는 중…</div>
   </header>
 
-  <section class="toolbar">
+  <section class="glass toolbar">
     <label>
       기간
       <select id="period">
         {% for p in periods %}
         <option value="{{ p }}" {% if p == default_period %}selected{% endif %}>{{ p }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>
-      분류
-      <select id="catFilter">
-        <option value="">전체</option>
-        {% for c in categories %}
-        <option value="{{ c }}">{{ c }}</option>
         {% endfor %}
       </select>
     </label>
@@ -46,31 +42,57 @@
         <option value="symbol">심볼</option>
       </select>
     </label>
+    <label>
+      내 태그
+      <select id="catFilter">
+        <option value="">전체</option>
+        {% for c in categories %}
+        <option value="{{ c }}">{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
   </section>
 
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th class="num">#</th>
-          <th>심볼</th>
-          <th class="num">현재가</th>
-          <th class="num">변동</th>
-          <th class="num">24h 대금</th>
-          <th>분류</th>
-          <th>메모</th>
-        </tr>
-      </thead>
-      <tbody id="tbody">
-        <tr><td colspan="7" class="empty">데이터 대기 중</td></tr>
-      </tbody>
-    </table>
-  </div>
+  <section class="block">
+    <div class="block-head">
+      <h2>1. 대세판단</h2>
+      <p>유가 · SOXL · 나스닥 · BTC · ETH · SOL</p>
+    </div>
+    <div class="macro-grid" id="macro"></div>
+  </section>
+
+  <section class="block">
+    <div class="block-head">
+      <h2>2. 알트코인</h2>
+      <p id="altMeta">중간값 변동 · 상승 종목 비율</p>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="glass table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="num">#</th>
+            <th>심볼</th>
+            <th>섹터</th>
+            <th class="num">현재가</th>
+            <th class="num">변동</th>
+            <th class="num">24h 대금</th>
+            <th>태그</th>
+            <th>메모</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="8" class="empty">데이터 대기 중</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
 
   <script>
     window.STOCK_CHECK = {
       pollInterval: {{ poll_interval }},
       categories: {{ categories | tojson }},
+      sectors: {{ sectors | tojson }},
     };
   </script>
   <script src="/static/app.js"></script>

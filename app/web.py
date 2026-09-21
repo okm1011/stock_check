@@ -15,6 +15,7 @@ from starlette.requests import Request
 from app.binance import BinanceFutures
 from app.config import PERIOD_SECONDS, load_config
 from app.poller import Poller, backfill_missing
+from app.sectors import SECTORS, group_rows
 from app.store import Store, _minute_ts
 
 CFG = load_config()
@@ -98,6 +99,7 @@ def _rows_for(period: str) -> list[dict]:
             {
                 "symbol": r["symbol"],
                 "base": r["base"],
+                "kind": r.get("kind") or "COIN",
                 "price": price,
                 "change_pct": round(change, 2) if change is not None else None,
                 "quote_volume": r.get("quote_volume"),
@@ -129,6 +131,7 @@ def index(request: Request) -> HTMLResponse:
             "default_period": CFG["default_period"],
             "categories": CFG["categories"],
             "poll_interval": int(CFG["poll_interval_seconds"]),
+            "sectors": [{"id": s, "label": l} for s, l in SECTORS],
         },
     )
 
@@ -147,6 +150,7 @@ def meta() -> dict:
         "categories": cats,
         "poll_interval": int(CFG["poll_interval_seconds"]),
         "snapshot_coverage": have,
+        "sectors": [{"id": s, "label": l} for s, l in SECTORS],
     }
 
 
@@ -156,6 +160,8 @@ def rows(period: str = "24h") -> dict:
         raise HTTPException(400, f"unknown period: {period}")
     filling = _kick_backfill(period)
     have, total = _coverage(period)
+    rows = _rows_for(period)
+    grouped = group_rows(rows)
     return {
         "period": period,
         "updated_at": STORE.last_updated(),
@@ -165,7 +171,8 @@ def rows(period: str = "24h") -> dict:
         "coverage": have,
         "count": total,
         "now": int(time.time()),
-        "rows": _rows_for(period),
+        "rows": rows,
+        **grouped,
     }
 
 

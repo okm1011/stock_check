@@ -21,6 +21,7 @@ history_days: 8
 
 db_path: data/stock_check.db
 
+# 사용자 태그만 (섹터 분류는 코드에서 자동)
 categories:
   - 미분류
   - 관심

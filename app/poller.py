@@ -54,7 +54,9 @@ class Poller:
         now = time.monotonic()
         if now - self._symbols_at > 6 * 3600 or not self.store.symbols():
             info = self.binance.usdt_perpetuals(self.quote, self.contract)
-            self.store.replace_symbols([(r["symbol"], r["base"], r["status"]) for r in info])
+            self.store.replace_symbols(
+                [(r["symbol"], r["base"], r["status"], r.get("kind") or "COIN") for r in info]
+            )
             self._symbols_at = now
 
         wanted = set(self.store.symbols())

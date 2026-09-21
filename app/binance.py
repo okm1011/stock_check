@@ -14,13 +14,15 @@ class BinanceFutures:
     def close(self) -> None:
         self._http.close()
 
-    def usdt_perpetuals(self, quote: str = "USDT", contract: str = "PERPETUAL") -> list[dict]:
+    def usdt_perpetuals(self, quote: str = "USDT", contract: str | list[str] = "PERPETUAL") -> list[dict]:
+        types = {contract} if isinstance(contract, str) else set(contract)
+        types.add("TRADIFI_PERPETUAL")
         data = self._http.get(f"{FAPI}/fapi/v1/exchangeInfo").json()
         out: list[dict] = []
         for s in data.get("symbols", []):
             if s.get("status") != "TRADING":
                 continue
-            if s.get("contractType") != contract:
+            if s.get("contractType") not in types:
                 continue
             if s.get("quoteAsset") != quote:
                 continue
@@ -29,6 +31,7 @@ class BinanceFutures:
                     "symbol": s["symbol"],
                     "base": s.get("baseAsset") or s["symbol"].replace(quote, ""),
                     "status": s.get("status", "TRADING"),
+                    "kind": s.get("underlyingType") or "COIN",
                 }
             )
         out.sort(key=lambda r: r["symbol"])

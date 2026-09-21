@@ -28,7 +28,8 @@ class Store:
                 CREATE TABLE IF NOT EXISTS symbols (
                   symbol TEXT PRIMARY KEY,
                   base TEXT NOT NULL,
-                  status TEXT NOT NULL
+                  status TEXT NOT NULL,
+                  kind TEXT NOT NULL DEFAULT 'COIN'
                 );
 
                 CREATE TABLE IF NOT EXISTS tickers (
@@ -55,13 +56,19 @@ class Store:
                 );
                 """
             )
+            try:
+                self._conn.execute(
+                    "ALTER TABLE symbols ADD COLUMN kind TEXT NOT NULL DEFAULT 'COIN'"
+                )
+            except sqlite3.OperationalError:
+                pass
             self._conn.commit()
 
-    def replace_symbols(self, rows: list[tuple[str, str, str]]) -> None:
+    def replace_symbols(self, rows: list[tuple[str, str, str, str]]) -> None:
         with self._lock:
             self._conn.execute("DELETE FROM symbols")
             self._conn.executemany(
-                "INSERT INTO symbols(symbol, base, status) VALUES (?, ?, ?)",
+                "INSERT INTO symbols(symbol, base, status, kind) VALUES (?, ?, ?, ?)",
                 rows,
             )
             self._conn.commit()
@@ -159,6 +166,7 @@ class Store:
                 SELECT
                   s.symbol,
                   s.base,
+                  COALESCE(s.kind, 'COIN') AS kind,
                   t.price,
                   t.change_24h,
                   t.quote_volume,

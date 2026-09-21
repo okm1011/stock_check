@@ -1,0 +1,15 @@
+[Unit]
+Description=Stock Check Futures Watchlist
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/stock_check
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/ec2-user/stock_check/.venv/bin/python -m app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
