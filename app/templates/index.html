@@ -15,7 +15,7 @@
     <div class="brand">
       <p class="kicker">Binance USDT-M</p>
       <h1>stock_check</h1>
-      <p class="sub">대세판단 · 알트 섹터 워치리스트</p>
+      <p class="sub">대세판단 · RootData 태그 워치리스트</p>
     </div>
     <div class="status" id="status">시세 불러오는 중…</div>
   </header>
@@ -31,24 +31,17 @@
     </label>
     <label class="grow">
       검색
-      <input id="q" type="search" placeholder="심볼 / 메모" autocomplete="off" />
+      <input id="q" type="search" placeholder="심볼 / 태그 / 설명" autocomplete="off" />
     </label>
     <label>
       정렬
       <select id="sort">
         <option value="change_desc">변동↓</option>
         <option value="change_asc">변동↑</option>
+        <option value="popularity_desc">인기↓</option>
+        <option value="growth_desc">성장↓</option>
         <option value="volume_desc">거래대금↓</option>
         <option value="symbol">심볼</option>
-      </select>
-    </label>
-    <label>
-      내 태그
-      <select id="catFilter">
-        <option value="">전체</option>
-        {% for c in categories %}
-        <option value="{{ c }}">{{ c }}</option>
-        {% endfor %}
       </select>
     </label>
   </section>
@@ -64,7 +57,7 @@
   <section class="block">
     <div class="block-head">
       <h2>2. 알트코인</h2>
-      <p id="altMeta">중간값 변동 · 상승 종목 비율</p>
+      <p id="altMeta">태그별 중간값 변동 · 상승 종목 비율</p>
     </div>
     <div class="chips" id="chips"></div>
     <div class="glass table-wrap">
@@ -73,16 +66,18 @@
           <tr>
             <th class="num">#</th>
             <th>심볼</th>
-            <th>섹터</th>
+            <th>태그</th>
             <th class="num">현재가</th>
             <th class="num">변동</th>
             <th class="num">24h 대금</th>
-            <th>태그</th>
-            <th>메모</th>
+            <th class="num">인기</th>
+            <th class="num">성장</th>
+            <th class="num">투명성</th>
+            <th>설명</th>
           </tr>
         </thead>
         <tbody id="tbody">
-          <tr><td colspan="8" class="empty">데이터 대기 중</td></tr>
+          <tr><td colspan="10" class="empty">데이터 대기 중</td></tr>
         </tbody>
       </table>
     </div>
@@ -91,8 +86,6 @@
   <script>
     window.STOCK_CHECK = {
       pollInterval: {{ poll_interval }},
-      categories: {{ categories | tojson }},
-      sectors: {{ sectors | tojson }},
     };
   </script>
   <script src="/static/app.js"></script>

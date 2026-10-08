@@ -29,7 +29,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     data.setdefault("default_period", "24h")
     data.setdefault("periods", list(PERIOD_SECONDS))
     data.setdefault("history_days", 8)
-    data.setdefault("categories", ["미분류", "관심", "매수후보", "관망", "제외"])
+    data.setdefault("rootdata_interval_seconds", 86400)
     db = data.get("db_path", "data/stock_check.db")
     data["db_path"] = str((ROOT / db).resolve()) if not Path(db).is_absolute() else db
     return data

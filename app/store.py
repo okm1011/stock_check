@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 import time
@@ -54,6 +55,18 @@ class Store:
                   memo TEXT NOT NULL DEFAULT '',
                   updated_at INTEGER NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS profiles (
+                  base TEXT PRIMARY KEY,
+                  project_id INTEGER,
+                  name TEXT NOT NULL DEFAULT '',
+                  tags TEXT NOT NULL DEFAULT '[]',
+                  popularity REAL,
+                  growth REAL,
+                  transparency REAL,
+                  brief TEXT NOT NULL DEFAULT '',
+                  updated_at INTEGER NOT NULL
+                );
                 """
             )
             try:
@@ -77,6 +90,11 @@ class Store:
         with self._lock:
             cur = self._conn.execute("SELECT symbol FROM symbols ORDER BY symbol")
             return [r[0] for r in cur.fetchall()]
+
+    def symbol_bases(self) -> list[tuple[str, str]]:
+        with self._lock:
+            cur = self._conn.execute("SELECT symbol, base FROM symbols ORDER BY symbol")
+            return [(r[0], r[1]) for r in cur.fetchall()]
 
     def upsert_tickers(self, rows: list[tuple[str, float, float | None, float | None, int]]) -> None:
         with self._lock:
@@ -136,28 +154,82 @@ class Store:
             val = cur.fetchone()[0]
             return int(val) if val else None
 
-    def save_note(self, symbol: str, category: str, memo: str) -> None:
+    def upsert_profile(
+        self,
+        base: str,
+        project_id: int | None,
+        name: str,
+        tags: list[str],
+        popularity: float | None,
+        growth: float | None,
+        transparency: float | None,
+        brief: str,
+    ) -> None:
         now = int(time.time())
         with self._lock:
             self._conn.execute(
                 """
-                INSERT INTO notes(symbol, category, memo, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(symbol) DO UPDATE SET
-                  category=excluded.category,
-                  memo=excluded.memo,
+                INSERT INTO profiles(
+                  base, project_id, name, tags, popularity, growth, transparency, brief, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(base) DO UPDATE SET
+                  project_id=excluded.project_id,
+                  name=excluded.name,
+                  tags=excluded.tags,
+                  popularity=excluded.popularity,
+                  growth=excluded.growth,
+                  transparency=excluded.transparency,
+                  brief=excluded.brief,
                   updated_at=excluded.updated_at
                 """,
-                (symbol, category.strip() or "미분류", memo.strip(), now),
+                (
+                    base,
+                    project_id,
+                    name.strip(),
+                    json.dumps(tags, ensure_ascii=False),
+                    popularity,
+                    growth,
+                    transparency,
+                    brief.strip(),
+                    now,
+                ),
             )
             self._conn.commit()
 
-    def note_categories(self) -> list[str]:
+    def profile_map(self) -> dict[str, dict]:
         with self._lock:
             cur = self._conn.execute(
-                "SELECT DISTINCT category FROM notes WHERE category != '' ORDER BY category"
+                """
+                SELECT base, project_id, name, tags, popularity, growth, transparency, brief, updated_at
+                FROM profiles
+                """
             )
-            return [r[0] for r in cur.fetchall()]
+            out: dict[str, dict] = {}
+            for r in cur.fetchall():
+                try:
+                    tags = json.loads(r["tags"] or "[]")
+                except json.JSONDecodeError:
+                    tags = []
+                if not isinstance(tags, list):
+                    tags = []
+                out[r["base"]] = {
+                    "project_id": r["project_id"],
+                    "name": r["name"] or "",
+                    "tags": [str(t) for t in tags if t],
+                    "popularity": r["popularity"],
+                    "growth": r["growth"],
+                    "transparency": r["transparency"],
+                    "brief": r["brief"] or "",
+                    "updated_at": int(r["updated_at"]),
+                }
+            return out
+
+    def profiles_updated_at(self) -> int | None:
+        with self._lock:
+            cur = self._conn.execute("SELECT MAX(updated_at) FROM profiles")
+            val = cur.fetchone()[0]
+            return int(val) if val else None
 
     def rows(self) -> list[dict]:
         with self._lock:
@@ -170,12 +242,9 @@ class Store:
                   t.price,
                   t.change_24h,
                   t.quote_volume,
-                  t.updated_at,
-                  COALESCE(n.category, '미분류') AS category,
-                  COALESCE(n.memo, '') AS memo
+                  t.updated_at
                 FROM symbols s
                 JOIN tickers t ON t.symbol = s.symbol
-                LEFT JOIN notes n ON n.symbol = s.symbol
                 ORDER BY s.symbol
                 """
             )

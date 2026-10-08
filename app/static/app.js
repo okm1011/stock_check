@@ -1,14 +1,13 @@
-const cfg = window.STOCK_CHECK || { pollInterval: 60, categories: [], sectors: [] };
+const cfg = window.STOCK_CHECK || { pollInterval: 60 };
 const $ = (id) => document.getElementById(id);
 
 const state = {
   rows: [],
   macro: [],
-  sectors: [],
+  tagGroups: [],
   altCount: 0,
-  classified: 0,
   altStrength: null,
-  sector: "all",
+  tag: "all",
   updatedAt: null,
   backfill: false,
 };
@@ -29,6 +28,14 @@ function fmtChg(v) {
   return { text: `${sign}${n.toFixed(2)}%`, cls };
 }
 
+function fmtMetric(v) {
+  if (v == null || Number.isNaN(Number(v))) return "—";
+  const n = Number(v);
+  if (Math.abs(n) >= 100) return n.toFixed(0);
+  if (Math.abs(n) >= 10) return n.toFixed(1);
+  return n.toFixed(2);
+}
+
 function fmtVol(v) {
   if (v == null) return "—";
   const n = Number(v);
@@ -43,17 +50,6 @@ function fmtTime(ts) {
   return new Date(ts * 1000).toLocaleTimeString("ko-KR", { hour12: false });
 }
 
-function currentCats() {
-  const extra = [...new Set(state.rows.map((r) => r.category).filter(Boolean))];
-  return [...new Set([...(cfg.categories || []), ...extra])];
-}
-
-function catOptions(selected) {
-  return currentCats()
-    .map((c) => `<option value="${esc(c)}" ${c === selected ? "selected" : ""}>${esc(c)}</option>`)
-    .join("");
-}
-
 function esc(s) {
   return String(s ?? "")
     .replaceAll("&", "&amp;")
@@ -62,31 +58,36 @@ function esc(s) {
 }
 
 function altRows() {
-  const all = (state.sectors || []).flatMap((s) =>
-    (s.rows || []).map((r) => ({ ...r, sector: s.id, sector_label: s.label }))
-  );
-  return all.length ? all : state.rows.filter((r) => !r.is_macro);
+  return state.rows.filter((r) => !r.is_macro);
 }
 
 function filtered() {
   const q = $("q").value.trim().toUpperCase();
-  const cat = $("catFilter").value;
+  const rawQ = $("q").value.trim();
   let rows = altRows();
-  if (state.sector !== "all") rows = rows.filter((r) => r.sector === state.sector);
-  if (cat) rows = rows.filter((r) => r.category === cat);
+  if (state.tag === "기타") rows = rows.filter((r) => !(r.tags || []).length);
+  else if (state.tag !== "all") rows = rows.filter((r) => (r.tags || []).includes(state.tag));
   if (q) {
     rows = rows.filter(
       (r) =>
         r.symbol.includes(q) ||
         (r.base || "").toUpperCase().includes(q) ||
-        (r.memo || "").toUpperCase().includes(q) ||
-        (r.sector_label || "").includes($("q").value.trim())
+        (r.brief || "").toUpperCase().includes(q) ||
+        (r.tags || []).some((t) => String(t).toUpperCase().includes(q) || String(t).includes(rawQ))
     );
   }
   const sort = $("sort").value;
   rows.sort((a, b) => {
     if (sort === "symbol") return a.symbol.localeCompare(b.symbol);
     if (sort === "volume_desc") return (b.quote_volume || 0) - (a.quote_volume || 0);
+    if (sort === "popularity_desc" || sort === "growth_desc") {
+      const key = sort === "popularity_desc" ? "popularity" : "growth";
+      const av = a[key], bv = b[key];
+      if (av == null && bv == null) return a.symbol.localeCompare(b.symbol);
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return bv - av;
+    }
     const av = a.change_pct, bv = b.change_pct;
     if (av == null && bv == null) return a.symbol.localeCompare(b.symbol);
     if (av == null) return 1;
@@ -124,13 +125,12 @@ function renderChips() {
     count: state.altCount,
     ...(state.altStrength || {}),
   };
-  const items = [all].concat(state.sectors || []);
+  const items = [all].concat(state.tagGroups || []);
   el.innerHTML = items
     .map((s) => {
       const ch = fmtChg(s.median_chg);
-      const br =
-        s.up_pct == null ? "—" : `${Number(s.up_pct).toFixed(0)}%↑`;
-      return `<button type="button" class="chip ${state.sector === s.id ? "on" : ""}" data-sec="${esc(s.id)}">
+      const br = s.up_pct == null ? "—" : `${Number(s.up_pct).toFixed(0)}%↑`;
+      return `<button type="button" class="chip ${state.tag === s.id ? "on" : ""}" data-tag="${esc(s.id)}">
         <span class="chip-name">${esc(s.label)} <em>${s.count ?? 0}</em></span>
         <span class="chip-med ${ch.cls}">${ch.text}</span>
         <span class="chip-br">${br}</span>
@@ -143,26 +143,24 @@ function renderTable() {
   const rows = filtered();
   const tbody = $("tbody");
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty">조건에 맞는 종목이 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">조건에 맞는 종목이 없습니다</td></tr>`;
     return;
   }
   tbody.innerHTML = rows
     .map((r, i) => {
       const ch = fmtChg(r.change_pct);
-      return `<tr data-symbol="${esc(r.symbol)}">
+      const tags = (r.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("");
+      return `<tr>
         <td class="num">${i + 1}</td>
         <td><span class="sym">${esc(r.base || r.symbol)}</span><span class="base">${esc(r.symbol)}</span></td>
-        <td><span class="sec-pill">${esc(r.sector_label || "")}</span></td>
+        <td><div class="tags">${tags || "—"}</div></td>
         <td class="num">${fmtPrice(r.price)}</td>
         <td class="num ${ch.cls}">${ch.text}</td>
         <td class="num">${fmtVol(r.quote_volume)}</td>
-        <td>
-          <select class="cat">
-            ${catOptions(r.category)}
-            <option value="__custom__">직접 입력…</option>
-          </select>
-        </td>
-        <td><input class="memo" value="${esc(r.memo)}" maxlength="500" placeholder="메모" /></td>
+        <td class="num">${fmtMetric(r.popularity)}</td>
+        <td class="num">${fmtMetric(r.growth)}</td>
+        <td class="num">${fmtMetric(r.transparency)}</td>
+        <td><div class="brief" title="${esc(r.brief)}">${esc(r.brief) || "—"}</div></td>
       </tr>`;
     })
     .join("");
@@ -172,8 +170,16 @@ function render() {
   renderMacro();
   renderChips();
   renderTable();
-  $("altMeta").textContent =
-    `알트 ${state.altCount}종 · 칩 = 중간값 변동 / 상승비율 (선택 기간)`;
+  $("altMeta").textContent = `알트 ${state.altCount}종 · 칩 = 태그별 중간값 변동 / 상승비율 (선택 기간)`;
+}
+
+function rootdataLabel(data) {
+  const st = data.rootdata_status || "";
+  if (st === "sync") return data.rootdata_error ? `RootData ${data.rootdata_error}` : "RootData 갱신 중";
+  if (st === "error") return "RootData 오류";
+  if (st === "wait") return "RootData 종목 대기";
+  if (data.rootdata_updated_at) return `RootData ${fmtTime(data.rootdata_updated_at)}`;
+  return "";
 }
 
 function applyStatus(data) {
@@ -182,11 +188,12 @@ function applyStatus(data) {
     `알트 ${data.alt_count ?? 0}`,
     `갱신 ${fmtTime(data.updated_at)}`,
     data.poll_status || "",
+    rootdataLabel(data),
   ];
   if (data.backfill) bits.push("과거가 채우는 중");
   el.textContent = bits.filter(Boolean).join(" · ");
-  el.className = "status " + (data.poll_status === "error" ? "err" : "ok");
-  if (data.last_error) el.title = data.last_error;
+  el.className = "status " + (data.poll_status === "error" || data.rootdata_status === "error" ? "err" : "ok");
+  el.title = data.rootdata_error || data.last_error || "";
 }
 
 async function load() {
@@ -195,74 +202,23 @@ async function load() {
   const data = await res.json();
   state.rows = data.rows || [];
   state.macro = data.macro || [];
-  state.sectors = data.sectors || [];
+  state.tagGroups = data.tag_groups || [];
   state.altCount = data.alt_count || 0;
-  state.classified = data.alt_classified || 0;
   state.altStrength = data.alt_strength || null;
   state.updatedAt = data.updated_at;
   state.backfill = !!data.backfill;
   applyStatus(data);
-  const cat = $("catFilter");
-  const keep = cat.value;
-  cat.innerHTML = ['<option value="">전체</option>']
-    .concat(currentCats().map((c) => `<option value="${esc(c)}">${esc(c)}</option>`))
-    .join("");
-  cat.value = keep;
   render();
-}
-
-async function saveRow(tr) {
-  const symbol = tr.dataset.symbol;
-  const category = tr.querySelector(".cat").value;
-  const memo = tr.querySelector(".memo").value;
-  const row = state.rows.find((r) => r.symbol === symbol);
-  if (row) {
-    row.category = category;
-    row.memo = memo;
-  }
-  await fetch(`/api/notes/${encodeURIComponent(symbol)}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ category, memo }),
-  });
 }
 
 $("chips").addEventListener("click", (e) => {
-  const btn = e.target.closest("[data-sec]");
+  const btn = e.target.closest("[data-tag]");
   if (!btn) return;
-  state.sector = btn.dataset.sec;
+  state.tag = btn.dataset.tag;
   render();
 });
 
-$("tbody").addEventListener("change", async (e) => {
-  const tr = e.target.closest("tr");
-  if (!tr) return;
-  if (e.target.classList.contains("cat") && e.target.value === "__custom__") {
-    const name = prompt("태그 이름");
-    if (!name) {
-      e.target.value = "미분류";
-      return;
-    }
-    if (![...e.target.options].some((o) => o.value === name)) {
-      const opt = document.createElement("option");
-      opt.value = name;
-      opt.textContent = name;
-      e.target.insertBefore(opt, e.target.lastElementChild);
-    }
-    e.target.value = name;
-  }
-  await saveRow(tr);
-});
-
-let memoTimer = null;
-$("tbody").addEventListener("input", (e) => {
-  if (!e.target.classList.contains("memo")) return;
-  const tr = e.target.closest("tr");
-  clearTimeout(memoTimer);
-  memoTimer = setTimeout(() => saveRow(tr), 400);
-});
-
-["period", "catFilter", "sort"].forEach((id) =>
+["period", "sort"].forEach((id) =>
   $(id).addEventListener("change", () => {
     if (id === "period") load();
     else render();
