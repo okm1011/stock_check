@@ -131,9 +131,9 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
     return TEMPLATES.TemplateResponse(
+        request,
         "index.html",
         {
-            "request": request,
             "periods": CFG["periods"],
             "default_period": CFG["default_period"],
             "poll_interval": int(CFG["poll_interval_seconds"]),
